@@ -9,50 +9,89 @@ export default class DataPreprocessor {
     }
 
     extractFeatures() {
-        this.features = tf.tensor2d(
+        this.rawFeatures = tf.tensor2d(
             this.data.map((record) => record.sqft_living),
             [this.data.length, 1],
         );
     }
 
     extractLabels() {
-        this.labels = tf.tensor2d(
+        this.rawLabels = tf.tensor2d(
             this.data.map((record) => record.price),
             [this.data.length, 1],
         );
     }
 
     normalize() {
-        this.featureMin = this.features.min();
-        this.featureMax = this.features.max();
-        this.features = this.features
+        this.featureMin = this.rawFeatures.min();
+        this.featureMax = this.rawFeatures.max();
+        this.features = this.rawFeatures
             .sub(this.featureMin)
             .div(this.featureMax.sub(this.featureMin));
 
-        this.labelMin = this.labels.min();
-        this.labelMax = this.labels.max();
-        this.labels = this.labels
+        this.labelMin = this.rawLabels.min();
+        this.labelMax = this.rawLabels.max();
+        this.labels = this.rawLabels
             .sub(this.labelMin)
             .div(this.labelMax.sub(this.labelMin));
     }
 
-    denormalize(tensor, min, max) {
-        return tensor.mul(max.sub(min)).add(min);
+    normalizeNewInput(tensor) {
+        tensor = tensor
+            .sub(this.featureMin)
+            .div(this.featureMax.sub(this.featureMin));
+        return tensor;
     }
 
-    async scatterplot() {
-        let data = tf.concat([this.features, this.labels], 1);
+    denormalizeFeatures(tensor) {
+        return tensor
+            .mul(this.featureMax.sub(this.featureMin))
+            .add(this.featureMin);
+    }
+
+    denormalizePredictions(tensor) {
+        return tensor.mul(this.labelMax.sub(this.labelMin)).add(this.labelMin);
+    }
+
+    async scatterplot(predictedPoints = null) {
+        let data = tf.concat([this.rawFeatures, this.rawLabels], 1);
         data = await data.arraySync();
         data = data.map((entry) => {
             return { x: entry[0], y: entry[1] };
         });
-        console.log("data:", data);
+
+        const values = [data];
+        const series = ["original"];
+
+        if (Array.isArray(predictedPoints)) {
+            values.push(predictedPoints);
+            series.push("predicted");
+        }
 
         tfvis.render.scatterplot(
             { name: `Sqft_Living vs House Price` },
-            { values: [data], series: ["original"] },
+            { values, series },
             { xLabel: "Sqft_Living", yLabel: "Price" },
         );
+    }
+
+    async plotPredictions(model) {
+        const [Xs, ys] = tf.tidy(() => {
+            let Xs = tf.linspace(0, 1, 100);
+            let ys = model.predict(Xs.reshape([100, 1]));
+
+            // denormalize:
+            Xs = this.denormalizeFeatures(Xs);
+            ys = this.denormalizePredictions(ys);
+
+            return [Xs.dataSync(), ys.dataSync()];
+        });
+
+        const predictionPoints = Array.from(Xs).map((x, index) => {
+            return { x, y: ys[index] };
+        });
+
+        this.scatterplot(predictionPoints);
     }
 
     shuffle() {
