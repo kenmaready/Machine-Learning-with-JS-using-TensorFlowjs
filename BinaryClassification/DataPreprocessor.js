@@ -12,7 +12,6 @@ export default class DataPreprocessor {
     extractFeatures() {
         this.rawFeatures = tf.tensor2d(
             this.data.map((record) => [record.sqft_living, record.price]),
-            [this.data.length, 2],
         );
     }
 
@@ -120,23 +119,55 @@ export default class DataPreprocessor {
         );
     }
 
-    async plotPredictions(model) {
-        const [Xs, ys] = tf.tidy(() => {
-            let Xs = tf.linspace(0, 1, 100);
-            let ys = model.predict(Xs.reshape([100, 1]));
+    async plotPredictions(model, name = "Predicted Class", size = 400) {
+        const [valuesPromise, xTicksPromise, yTicksPromise] = tf.tidy(() => {
+            const gridSize = 50;
+            const predictionColumns = [];
+            for (let colIndex = 0; colIndex < gridSize; colIndex++) {
+                const colInputs = [];
+                const x = colIndex / gridSize;
+                for (let rowIndex = 0; rowIndex < gridSize; rowIndex++) {
+                    const y = (gridSize - rowIndex) / gridSize;
+                    colInputs.push([x, y]);
+                }
+                const colPredictions = model.predict(tf.tensor2d(colInputs));
+                predictionColumns.push(colPredictions);
+            }
+            const valuesTensor = tf.stack(predictionColumns);
 
-            // denormalize:
-            Xs = this.denormalizeFeatures(Xs);
-            ys = this.denormalizePredictions(ys);
+            const normalizedTicksTensor = tf
+                .linspace(0, 1, 50)
+                .concat(tf.linspace(0, 1, 50).reverse())
+                .reshape([50, 2]);
+            const ticksTensor = this.denormalizeFeatures(normalizedTicksTensor);
 
-            return [Xs.dataSync(), ys.dataSync()];
+            const [xTicksTensor, yTicksTensor] = ticksTensor.split(2, 1);
+
+            return [
+                valuesTensor.array(),
+                xTicksTensor.array(),
+                yTicksTensor.array(),
+            ];
         });
 
-        const predictionPoints = Array.from(Xs).map((x, index) => {
-            return { x, y: ys[index] };
+        const values = await valuesPromise;
+        const xTicks = await xTicksPromise;
+        const yTicks = await yTicksPromise;
+
+        const xTickLabels = xTicks.map((v) => (v / 1000).toFixed(1) + "k sqft");
+        const yTickLabels = yTicks.map(
+            (v) => "$" + (v / 1000).toFixed(0) + "k",
+        );
+        console.log("xTickLabels:", xTickLabels);
+        console.log("yTickLabels:", yTickLabels);
+        const data = { values, xTickLabels, yTickLabels };
+
+        tfvis.render.heatmap({ name, tab: "Predictions" }, data, {
+            height: size,
+            domain: [0, 1],
         });
 
-        this.scatterplot(predictionPoints);
+        this.scatterplot();
     }
 
     shuffle() {

@@ -9,7 +9,8 @@ const saveBtn = document.getElementById("save-button");
 const predictBtn = document.getElementById("predict-button");
 const trainStatus = document.getElementById("model-status");
 const testStatus = document.getElementById("testing-status");
-const predictionInputElement = document.getElementById("prediction-input");
+const predictionInputElement1 = document.getElementById("prediction-input-1");
+const predictionInputElement2 = document.getElementById("prediction-input-2");
 const predictionOutput = document.getElementById("prediction-output");
 
 toggleBtn.addEventListener("click", toggleVisor);
@@ -20,7 +21,7 @@ loadBtn.addEventListener("click", loadModel);
 predictBtn.addEventListener("click", predict);
 
 let data, dp, model;
-let modelId = "kc-house-price-regression";
+let modelId = "kc-house-price-binary-classification";
 
 async function toggleVisor() {
     tfvis.visor().toggle();
@@ -102,15 +103,23 @@ async function loadModel() {
 }
 
 async function predict() {
-    const predictionInput = parseInt(predictionInputElement.value);
-    if (isNaN(predictionInput)) {
+    const predictionInput1 = parseInt(predictionInputElement1.value);
+    const predictionInput2 = parseInt(predictionInputElement2.value);
+    if (isNaN(predictionInput1) || isNaN(predictionInput2)) {
         console.log("No valid number entered. Please enter a valid number.");
-    } else if (predictionInput < 200) {
-        console.log("Please input a value of at least 200.");
+    } else if (predictionInput1 < 200 || predictionInput2 < 75000) {
+        console.log(
+            "Please input a sq foot value of at least 200 and a price of at least $75,000.",
+        );
     } else {
-        const prediction = await ml.predict(model, dp, predictionInput);
+        const prediction = await ml.predict(model, dp, [
+            predictionInput1,
+            predictionInput2,
+        ]);
         updatePredictionOutput(
-            `The predicted house price is $${prediction.toFixed(0)}`,
+            `The likelihood of this being a waterfront property is ${(
+                prediction * 100
+            ).toFixed(2)}%.`,
         );
     }
 }

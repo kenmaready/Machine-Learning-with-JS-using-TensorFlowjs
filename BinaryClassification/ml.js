@@ -23,14 +23,28 @@ export function createModel() {
         tf.layers.dense({
             units: 10,
             useBias: true,
-            activation: "linear",
-            inputDim: 1,
+            activation: "sigmoid",
+            inputDim: 2,
+        }),
+    );
+    model.add(
+        tf.layers.dense({
+            units: 10,
+            useBias: true,
+            activation: "sigmoid",
+        }),
+    );
+    model.add(
+        tf.layers.dense({
+            units: 1,
+            useBias: true,
+            activation: "sigmoid",
         }),
     );
 
-    const optimizer = tf.train.sgd(0.1);
+    const optimizer = tf.train.adam();
 
-    model.compile({ loss: "meanSquaredError", optimizer });
+    model.compile({ loss: "binaryCrossentropy", optimizer });
     return model;
 }
 
@@ -42,13 +56,13 @@ export async function trainModel(model, dp, XTrain, yTrain) {
 
     const trainResults = await model.fit(XTrain, yTrain, {
         batchSize: 32,
-        epochs: 20,
+        epochs: 50,
         validationSplit: 0.2,
         callbacks: {
             onEpochEnd,
-            onEpochBegin: async function () {
-                await dp.plotPredictions(model);
-            },
+            // onEpochBegin: async function () {
+            //     await dp.plotPredictions(model);
+            // },
         },
     });
 
@@ -83,16 +97,22 @@ export async function loadModel(storageId) {
     }
 }
 
-export async function predict(model, dp, input) {
+export async function predict(model, dp, inputs) {
     let prediction;
     await tf.tidy(() => {
-        const inputTensor = tf.tensor1d([input]);
+        const inputTensor = tf.tensor2d([inputs]);
+        console.log("inputTensor:", inputTensor.print());
         const normalizedTensor = dp.normalizeNewInput(inputTensor);
+        console.log("normalizedTensor:", normalizedTensor.print());
         const normalizedPredictionTensor = model.predict(normalizedTensor);
+        console.log(
+            "normalizedPredictionTensor:",
+            normalizedPredictionTensor.print(),
+        );
         const predictionTensor = dp.denormalizePredictions(
             normalizedPredictionTensor,
         );
-        console.log("predictionTensor:", predictionTensor);
+        console.log("predictionTensor:", predictionTensor.print());
         prediction = predictionTensor.dataSync()[0];
         console.log("prediction:", prediction);
     });
